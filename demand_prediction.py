@@ -1,155 +1,115 @@
-# inventory.py
+"""
+Smart Retail AI - Demand Prediction Module
 
-# Inventory Management Module
+This module predicts future product demand using historical sales data.
 
-# Dictionary to store products
-# Format:
-# product_id: {
-#     "name": product name,
-#     "quantity": available quantity,
-#     "price": product price
-# }
+Expected data columns:
+- date: Date of sale
+- product_id: Product ID
+- sales: Number of units sold
+"""
 
-inventory = {}
-
-# Minimum quantity before a low-stock alert is shown
-LOW_STOCK_LIMIT = 5
+import pandas as pd
 
 
-def add_product(product_id, name, quantity, price):
-    """Add a new product to the inventory."""
+def prepare_sales_data(data):
+    """
+    Clean and prepare historical sales data.
 
-    if product_id in inventory:
-        print("Product already exists.")
-        return False
+    Returns:
+        Cleaned pandas DataFrame
+    """
 
-    inventory[product_id] = {
-        "name": name,
-        "quantity": quantity,
-        "price": price
+    # Make a copy so the original data is not changed
+    data = data.copy()
+
+    # Required columns
+    required_columns = ["date", "product_id", "sales"]
+
+    # Check whether required columns exist
+    for column in required_columns:
+        if column not in data.columns:
+            raise ValueError(f"Missing required column: {column}")
+
+    # Convert date into datetime format
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+
+    # Convert sales values into numbers
+    data["sales"] = pd.to_numeric(data["sales"], errors="coerce")
+
+    # Remove rows with missing date, product ID, or sales
+    data = data.dropna(
+        subset=["date", "product_id", "sales"]
+    )
+
+    # Sales cannot be negative
+    data = data[data["sales"] >= 0]
+
+    # Sort sales data by date
+    data = data.sort_values("date")
+
+    return data
+
+
+def predict_demand(data, product_id, days_to_predict=7):
+    """
+    Predict future demand for a product.
+
+    The prediction is based on the average sales
+    from the most recent 7 records.
+
+    Args:
+        data: Historical sales DataFrame
+        product_id: Product ID to predict
+        days_to_predict: Number of future days
+
+    Returns:
+        Dictionary containing the prediction
+    """
+
+    # Make sure the data is clean
+    data = prepare_sales_data(data)
+
+    # Select sales for the requested product
+    product_data = data[
+        data["product_id"] == product_id
+    ]
+
+    # Check if there is enough historical data
+    if len(product_data) < 3:
+        return {
+            "product_id": product_id,
+            "predicted_daily_demand": 0,
+            "predicted_total_demand": 0,
+            "days": days_to_predict,
+            "status": "insufficient_data",
+            "message": "Not enough historical sales data."
+        }
+
+    # Take the most recent 7 sales records
+    recent_sales = product_data["sales"].tail(7)
+
+    # Calculate average sales
+    average_demand = recent_sales.mean()
+
+    # Round to a whole number because products
+    # are normally sold as whole units
+    predicted_daily_demand = round(average_demand)
+
+    # Calculate expected demand for the requested period
+    predicted_total_demand = (
+        predicted_daily_demand * days_to_predict
+    )
+
+    # Return a simple structured result
+    return {
+        "product_id": product_id,
+        "predicted_daily_demand": predicted_daily_demand,
+        "predicted_total_demand": predicted_total_demand,
+        "days": days_to_predict,
+        "status": "success",
+        "message": "Demand prediction generated successfully."
     }
-
-    print(f"Product '{name}' added successfully.")
-    return True
-
-
-def update_quantity(product_id, quantity):
-    """Update the quantity of an existing product."""
-
-    if product_id not in inventory:
-        print("Product not found.")
-        return False
-
-    if quantity < 0:
-        print("Quantity cannot be negative.")
-        return False
-
-    inventory[product_id]["quantity"] = quantity
-
-    print(
-        f"Quantity of '{inventory[product_id]['name']}' "
-        f"updated to {quantity}."
-    )
-
-    return True
-
-
-def delete_product(product_id):
-    """Delete a product from the inventory."""
-
-    if product_id not in inventory:
-        print("Product not found.")
-        return False
-
-    product_name = inventory[product_id]["name"]
-    del inventory[product_id]
-
-    print(f"Product '{product_name}' deleted successfully.")
-    return True
-
-
-def display_inventory():
-    """Display all products currently in inventory."""
-
-    if not inventory:
-        print("Inventory is empty.")
-        return
-
-    print("\n========== CURRENT INVENTORY ==========")
-
-    print(
-        f"{'ID':<10}"
-        f"{'Product Name':<25}"
-        f"{'Quantity':<12}"
-        f"{'Price':<10}"
-    )
-
-    print("-" * 57)
-
-    for product_id, product in inventory.items():
-        print(
-            f"{product_id:<10}"
-            f"{product['name']:<25}"
-            f"{product['quantity']:<12}"
-            f"₹{product['price']:<10.2f}"
-        )
-
-    print("=" * 57)
-
-
-def low_stock_alert():
-    """Display products whose quantity is below the low-stock limit."""
-
-    low_stock_products = []
-
-    for product_id, product in inventory.items():
-        if product["quantity"] <= LOW_STOCK_LIMIT:
-            low_stock_products.append(
-                (product_id, product)
-            )
-
-    if not low_stock_products:
-        print("\nNo low-stock products.")
-        return
-
-    print("\n========== LOW STOCK ALERT ==========")
-
-    for product_id, product in low_stock_products:
-        print(
-            f"⚠️ {product['name']} "
-            f"(ID: {product_id}) - "
-            f"Only {product['quantity']} left!"
-        )
-
-    print("=" * 38)
-
-
-def get_product(product_id):
-    """Return product details."""
-
-    if product_id not in inventory:
-        return None
-
-    return inventory[product_id]
-
-
-def search_product(product_id):
-    """Search for a product and display its details."""
-
-    product = get_product(product_id)
-
-    if product is None:
-        print("Product not found.")
-        return None
-
-    print("\nProduct Details")
-    print("----------------------")
-    print(f"ID       : {product_id}")
-    print(f"Name     : {product['name']}")
-    print(f"Quantity : {product['quantity']}")
-    print(f"Price    : ₹{product['price']:.2f}")
-
-    return product
 
 
 # --------------------------------------------------
@@ -158,25 +118,55 @@ def search_product(product_id):
 
 if __name__ == "__main__":
 
-    # Add products
-    add_product("P001", "Rice 5kg", 20, 350)
-    add_product("P002", "Milk 1L", 3, 60)
-    add_product("P003", "Bread", 10, 45)
+    # Sample historical sales data
+    sample_data = pd.DataFrame({
+        "date": [
+            "2026-08-01",
+            "2026-08-02",
+            "2026-08-03",
+            "2026-08-04",
+            "2026-08-05",
+            "2026-08-06",
+            "2026-08-07",
+            "2026-08-08"
+        ],
 
-    # Display inventory
-    display_inventory()
+        "product_id": [
+            "P001",
+            "P001",
+            "P001",
+            "P001",
+            "P001",
+            "P001",
+            "P001",
+            "P001"
+        ],
 
-    # Update quantity
-    update_quantity("P002", 8)
+        "sales": [
+            10,
+            12,
+            8,
+            15,
+            11,
+            14,
+            10,
+            13
+        ]
+    })
 
-    # Search product
-    search_product("P001")
+    # Predict demand for the next 7 days
+    result = predict_demand(
+        sample_data,
+        product_id="P001",
+        days_to_predict=7
+    )
 
-    # Low stock check
-    low_stock_alert()
-
-    # Delete product
-    delete_product("P003")
-
-    # Display final inventory
-    display_inventory()
+    print("\n========== DEMAND PREDICTION TEST ==========")
+    print("Product ID:", result["product_id"])
+    print("Predicted Daily Demand:",
+          result["predicted_daily_demand"])
+    print("Predicted Demand for 7 Days:",
+          result["predicted_total_demand"])
+    print("Status:", result["status"])
+    print("Message:", result["message"])
+    print("============================================")
