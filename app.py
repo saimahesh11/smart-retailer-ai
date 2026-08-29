@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 
+
 # ==========================================
 # PAGE CONFIGURATION
 # ==========================================
@@ -12,6 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
+
 # ==========================================
 # FILE SETUP
 # ==========================================
@@ -19,8 +21,9 @@ st.set_page_config(
 DATA_FILE = Path("data/inventory.csv")
 DATA_FILE.parent.mkdir(exist_ok=True)
 
+
 # ==========================================
-# LOAD INVENTORY%
+# LOAD INVENTORY
 # ==========================================
 
 def load_inventory():
@@ -69,6 +72,46 @@ def load_inventory():
 
 def save_inventory(df):
     df.to_csv(DATA_FILE, index=False)
+
+
+# ==========================================
+# STOCK STATUS FUNCTION
+# ==========================================
+
+def get_stock_status(current_stock, minimum_stock):
+    """
+    Return the stock status based on current stock
+    compared with the minimum stock level.
+
+    Rules:
+    - 0 stock                    -> Out of Stock
+    - 1% to 50% of minimum      -> Very Low
+    - >50% to 100% of minimum   -> Low
+    - Above minimum             -> Good
+    """
+
+    current_stock = float(current_stock)
+    minimum_stock = float(minimum_stock)
+
+    # Out of stock
+    if current_stock == 0:
+        return "Out of Stock"
+
+    # If minimum stock is 0, we cannot calculate a percentage.
+    # Any positive stock is considered Good.
+    if minimum_stock <= 0:
+        return "Good"
+
+    # Very Low Stock: 50% or less of minimum stock
+    if current_stock <= (minimum_stock * 0.50):
+        return "Very Low"
+
+    # Low Stock: above 50% and up to minimum stock
+    if current_stock <= minimum_stock:
+        return "Low"
+
+    # Above minimum stock
+    return "Good"
 
 
 # ==========================================
@@ -185,7 +228,10 @@ with st.container(border=True):
             st.error("Please enter the product name.")
 
         elif one_item_quantity <= 0:
-            st.error(f"Quantity in one {stock_type.lower()} must be greater than 0.")
+            st.error(
+                f"Quantity in one {stock_type.lower()} "
+                "must be greater than 0."
+            )
 
         elif current_stock < 0:
             st.error("Current stock cannot be negative.")
@@ -198,20 +244,26 @@ with st.container(border=True):
 
             # Check for duplicate product
             duplicate = (
-                (inventory["Product Name"].astype(str).str.lower() == product_name.strip().lower())
+                (inventory["Product Name"].astype(str).str.lower()
+                 == product_name.strip().lower())
                 &
-                (inventory["Brand"].astype(str).str.lower() == brand.strip().lower())
+                (inventory["Brand"].astype(str).str.lower()
+                 == brand.strip().lower())
                 &
-                (inventory["Stock Type"].astype(str).str.lower() == stock_type.lower())
+                (inventory["Stock Type"].astype(str).str.lower()
+                 == stock_type.lower())
                 &
-                (inventory["One Item Quantity"] == one_item_quantity)
+                (inventory["One Item Quantity"]
+                 == one_item_quantity)
                 &
-                (inventory["Unit"].astype(str).str.lower() == unit.lower())
+                (inventory["Unit"].astype(str).str.lower()
+                 == unit.lower())
             )
 
             if duplicate.any():
                 st.error(
-                    "This product with the same brand, stock type and quantity already exists!"
+                    "This product with the same brand, stock type "
+                    "and quantity already exists!"
                 )
 
             else:
@@ -253,36 +305,58 @@ st.header("📊 Inventory Dashboard")
 
 total_products = len(inventory)
 
+# Default values
+out_of_stock = 0
+very_low_stock = 0
+low_stock = 0
+good_stock = 0
+
 if len(inventory) > 0:
 
-    # Calculate status
-    out_of_stock = (
-        inventory["Current Stock"] == 0
-    ).sum()
+    # Count every stock category
+    for _, row in inventory.iterrows():
 
-    low_stock = (
-        (inventory["Current Stock"] > 0)
-        &
-        (inventory["Current Stock"] <= inventory["Minimum Stock"])
-    ).sum()
+        status = get_stock_status(
+            row["Current Stock"],
+            row["Minimum Stock"]
+        )
 
-else:
-    out_of_stock = 0
-    low_stock = 0
+        if status == "Out of Stock":
+            out_of_stock += 1
+
+        elif status == "Very Low":
+            very_low_stock += 1
+
+        elif status == "Low":
+            low_stock += 1
+
+        elif status == "Good":
+            good_stock += 1
 
 
-# Dashboard cards
-dash1, dash2, dash3 = st.columns(3)
+# ==========================================
+# DASHBOARD CARDS
+# ==========================================
+
+dash1, dash2, dash3, dash4, dash5 = st.columns(5)
 
 with dash1:
     st.markdown("📦 **Total Products**")
     st.subheader(total_products)
 
 with dash2:
+    st.markdown("🟢 **Good Stock**")
+    st.subheader(good_stock)
+
+with dash3:
     st.markdown("🟡 **Low Stock**")
     st.subheader(low_stock)
 
-with dash3:
+with dash4:
+    st.markdown("🟠 **Very Low Stock**")
+    st.subheader(very_low_stock)
+
+with dash5:
     st.markdown("🔴 **Out of Stock**")
     st.subheader(out_of_stock)
 
@@ -331,12 +405,21 @@ else:
             f"{int(row['Current Stock'])} {row['Stock Type']}s"
         )
 
-        # Status
-        if row["Current Stock"] == 0:
+        # New stock status
+        stock_status = get_stock_status(
+            row["Current Stock"],
+            row["Minimum Stock"]
+        )
+
+        # Display label
+        if stock_status == "Out of Stock":
             status = "🔴 Out of Stock"
 
-        elif row["Current Stock"] <= row["Minimum Stock"]:
-            status = "🟡 Low Stock"
+        elif stock_status == "Very Low":
+            status = "🟠 Very Low"
+
+        elif stock_status == "Low":
+            status = "🟡 Low"
 
         else:
             status = "🟢 Good"
@@ -349,7 +432,8 @@ else:
                 "One Item": one_item_text,
                 "Current Stock": current_stock_text,
                 "Total Available": total_available_text,
-                "Price per Stock Type": f"₹{float(row['Price']):,.2f}",
+                "Price per Stock Type":
+                    f"₹{float(row['Price']):,.2f}",
                 "Status": status
             }
         )
@@ -383,15 +467,40 @@ else:
 
     for _, row in inventory.iterrows():
 
-        if row["Current Stock"] == 0:
+        stock_status = get_stock_status(
+            row["Current Stock"],
+            row["Minimum Stock"]
+        )
+
+        if stock_status == "Out of Stock":
+
             alert_products.append(
-                f"🔴 {row['Product Name']} is out of stock!"
+                (
+                    "error",
+                    f"🔴 {row['Product Name']} is out of stock!"
+                )
             )
 
-        elif row["Current Stock"] <= row["Minimum Stock"]:
+        elif stock_status == "Very Low":
+
             alert_products.append(
-                f"🟡 {row['Product Name']} is running low!"
+                (
+                    "warning",
+                    f"🟠 {row['Product Name']} is very low "
+                    "on stock. Reorder urgently."
+                )
             )
+
+        elif stock_status == "Low":
+
+            alert_products.append(
+                (
+                    "info",
+                    f"🟡 {row['Product Name']} is running low. "
+                    "Consider planning a reorder."
+                )
+            )
+
 
     if len(alert_products) == 0:
 
@@ -399,5 +508,13 @@ else:
 
     else:
 
-        for alert in alert_products:
-            st.warning(alert)
+        for alert_type, alert_message in alert_products:
+
+            if alert_type == "error":
+                st.error(alert_message)
+
+            elif alert_type == "warning":
+                st.warning(alert_message)
+
+            else:
+                st.info(alert_message)
