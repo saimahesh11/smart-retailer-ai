@@ -20,7 +20,7 @@ DATA_FILE = Path("data/inventory.csv")
 DATA_FILE.parent.mkdir(exist_ok=True)
 
 # ==========================================
-# LOAD INVENTORY
+# LOAD INVENTORY%
 # ==========================================
 
 def load_inventory():
