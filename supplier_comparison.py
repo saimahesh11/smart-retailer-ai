@@ -1,4 +1,3 @@
-```python
 """
 Supplier Comparison Module
 Smart Retail AI - SAP Hackfest 2026
@@ -298,4 +297,4 @@ if __name__ == "__main__":
     print("========================================")
 
     print(reason)
-```
+
